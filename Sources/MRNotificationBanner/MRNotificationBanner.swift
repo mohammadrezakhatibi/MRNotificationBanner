@@ -17,14 +17,16 @@ open class MRNotificationBanner: UIView {
     private var titleLabel      : UILabel
     private var subtitleLabel   : UILabel
     private var bannerView      : UIView
-    private var isDispalying    : Bool = false
-    private var configuration   : MRNotificationBannerConfiguration!
     private var OriginalFrame   : CGRect? = .zero
     private var bannerType      : MRNotificationType = .full
     private var parent          : UIView!
-    
+    private var timer           : Timer?
+    private var queue           : [MRNotificationBanner]
+    private var configuration   : MRNotificationBannerConfiguration
+        
     /// Notification Types
     public enum MRNotificationType {
+        
         /// It's like Android snack bar.
         /// Open from bottom
         case snack
@@ -43,6 +45,8 @@ open class MRNotificationBanner: UIView {
         titleLabel                  = UILabel()
         subtitleLabel               = UILabel()
         bannerView                  = UIView()
+        queue                       = [MRNotificationBanner]()
+        configuration               = MRNotificationBannerConfiguration()
         
         super.init(frame: .zero)
         
@@ -60,154 +64,133 @@ open class MRNotificationBanner: UIView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    public func show(text: String,
+    public func show(title: String,
                      subtitle: String? = nil,
                      style: MRNotificationStyle,
                      parentView: UIView,
                      icon: UIImage? = nil,
                      dismissAutomatically: Bool? = true) {
         
-        /// If banner is showing, do not show agian until banner dismiss
-        if isDispalying == false {
-            
-            /// Set parent view
-            parent = parentView
-            
-            /// Set configuration
-            configuration = style.configuration()
-            
-            /// Add icon to banner
-            addBannerStyleAndColor(with: bannerType, and: style)
-            
-            isDispalying = true
-            
-            /// Parent Width
-            let width = parent.frame.size.width
-            
-            /// Banner vertical and horizontal margin
-            /// Margin calculated based on bannerEdgeInset set in configuration
-            /// For .full type horizontal and vertical margin set to 0
-            let bannerHorizontalMargin  = bannerType == .full ? 0 : (configuration.notificationEdgeInset.left + configuration.notificationEdgeInset.right)
-            let bannerVerticalMargin    = bannerType == .full ? 0 : (configuration.notificationEdgeInset.top + configuration.notificationEdgeInset.bottom)
-            
-            /// Calculate banner width
-            /// calculated based on parents width and horizontal margin
-            let bannerWidth = width - bannerHorizontalMargin
-            
-            
-            /// All labels (title and subtitle) vertical and horizontal margin
-            /// Margin calculated based on labelEdgeInset and subtitleLabelEdgeInset set in configuration
-            let labelsVerticalMargin = (configuration.labelEdgeInset.top + configuration.subtitleLabelEdgeInset.top) + (subtitle == nil ? (self.configuration.labelEdgeInset.bottom) : (self.configuration.subtitleLabelEdgeInset.bottom))
-            let labelsHorizontalMargin = (self.configuration.labelEdgeInset.right + self.configuration.labelEdgeInset.left)
-            
-            
-            /// Calculate label width
-            /// calculated based on parents width and labels and banner horizontal margins
-            let labelWidth = width - (labelsHorizontalMargin + bannerHorizontalMargin)
-            
-            
-            /// Add elements to parent view
-            bannerView.addSubview(titleLabel)
-            bannerView.addSubview(subtitleLabel)
-            parent.addSubview(bannerView)
-            
-            
-            /// Initial titleLabel
-            /// Add font, value and frame to titleLabel and calculate titleLabel height
-            titleLabel.text = text
-            titleLabel.font = style.configuration().titleFont
-            titleLabel.frame = CGRect(x: configuration.labelEdgeInset.left,
-                                      y: configuration.labelEdgeInset.top,
-                                      width: labelWidth,
-                                      height: 0)
-            
-            titleLabel.sizeToFit()
-            let labelHeight = titleLabel.textRect(forBounds: titleLabel.bounds, limitedToNumberOfLines: 0).height
-            
-            
-            /// Initial subtitleLabel
-            /// Add font, value and frame to subtitleLabel and calculate subtitleLabel height
-            subtitleLabel.font = style.configuration().subtitleFont
-            subtitleLabel.text = subtitle
-            subtitleLabel.frame = CGRect(x: configuration.subtitleLabelEdgeInset.left,
-                                         y: (configuration.labelEdgeInset.top + configuration.subtitleLabelEdgeInset.top) + labelHeight,
-                                         width: labelWidth,
-                                         height: 0)
-            
-            subtitleLabel.sizeToFit()
-            let subtitleLabelHeight = subtitleLabel.textRect(forBounds: subtitleLabel.bounds, limitedToNumberOfLines: 0).height
-            
-            
-            /// Banner Height
-            /// Calculate height of banner based on labels and margins
-            let bannerHeight = subtitleLabelHeight + labelHeight + labelsVerticalMargin
-            
-            
-            /// Set titleLabel frame
-            titleLabel.frame = CGRect(x: configuration.labelEdgeInset.left,
-                                      y: configuration.labelEdgeInset.top,
-                                      width: labelWidth,
-                                      height: labelHeight)
-            
-            /// Set subtitleLabel frame
-            subtitleLabel.frame = CGRect(x: configuration.subtitleLabelEdgeInset.left,
-                                         y: subtitleLabel.frame.origin.y,
-                                         width: labelWidth,
-                                         height: subtitleLabelHeight)
-            
-            /// Set originalFrame and bannerView's frame
-            switch bannerType {
-            
-            case .full:
-                
-                OriginalFrame = CGRect(x: 0, y: -bannerHeight, width:bannerWidth, height: bannerHeight)
-                bannerView.frame = CGRect(x: 0, y: -bannerHeight , width: width, height: bannerHeight)
-                
-            case .snack:
-                
-                OriginalFrame = CGRect(x: configuration.notificationEdgeInset.left, y: parent.frame.height + (bannerHeight + bannerVerticalMargin), width:bannerWidth, height: bannerHeight)
-                bannerView.frame = CGRect(x: configuration.notificationEdgeInset.left, y: parent.frame.height + bannerVerticalMargin, width: width - (configuration.notificationEdgeInset.left + configuration.notificationEdgeInset.right), height: bannerHeight)
-            default:
-                OriginalFrame = CGRect(x: configuration.notificationEdgeInset.left, y: 0 + (-bannerHeight - bannerVerticalMargin), width:bannerWidth, height: bannerHeight)
-                bannerView.frame = CGRect(x: configuration.notificationEdgeInset.left, y: -bannerHeight - bannerVerticalMargin, width: width - (configuration.notificationEdgeInset.left + configuration.notificationEdgeInset.right), height: bannerHeight)
-            }
         
-            /// Add icon to bannerView
-            if let icon = icon {
-                addIcon(icon: icon, bannerHeight: bannerHeight, labelWidth: labelWidth, labelHeight: labelHeight, subtitleLabelHeight: subtitleLabelHeight)
-            }
-            
+        /// Set parent view
+        parent = parentView
         
-            /// Finally, show bannerView
-            switch bannerType {
-            case .full:
-                showFullBanner(width: width, bannerHeight: bannerHeight, dismissAutomatically: dismissAutomatically)
-            case .snack:
-                showSnakBanner(width: width, bannerHeight: bannerHeight, dismissAutomatically: dismissAutomatically)
-            default:
-                showFloatBanner(width: width, bannerHeight: bannerHeight, dismissAutomatically: dismissAutomatically)
-            }
+        /// Set configuration
+        configuration = style.configuration()
+        
+        /// Add icon to banner
+        addBannerStyleAndColor(with: bannerType, and: style)
+        
+        /// Parent Width
+        let width = parent.frame.size.width
+        
+        /// Banner vertical and horizontal margin
+        /// Margin calculated based on bannerEdgeInset set in configuration
+        /// For .full type horizontal and vertical margin set to 0
+        let bannerHorizontalMargin  = bannerType == .full ? 0 : (configuration.notificationEdgeInset.left + configuration.notificationEdgeInset.right)
+        let bannerVerticalMargin    = bannerType == .full ? 0 : (configuration.notificationEdgeInset.top + configuration.notificationEdgeInset.bottom)
+        
+        /// Calculate banner width
+        /// calculated based on parents width and horizontal margin
+        let bannerWidth = width - bannerHorizontalMargin
+        
+        
+        /// All labels (title and subtitle) vertical and horizontal margin
+        /// Margin calculated based on labelEdgeInset and subtitleLabelEdgeInset set in configuration
+        let labelsVerticalMargin = (configuration.labelEdgeInset.top + configuration.subtitleLabelEdgeInset.top) + (subtitle == nil ? (self.configuration.labelEdgeInset.bottom) : (self.configuration.subtitleLabelEdgeInset.bottom))
+        let labelsHorizontalMargin = (self.configuration.labelEdgeInset.right + self.configuration.labelEdgeInset.left)
+        
+        
+        /// Calculate label width
+        /// calculated based on parents width and labels and banner horizontal margins
+        let labelWidth = width - (labelsHorizontalMargin + bannerHorizontalMargin)
+        
+        
+        /// Add elements to parent view
+        bannerView.addSubview(titleLabel)
+        bannerView.addSubview(subtitleLabel)
+        addSubview(bannerView)
+        parent.addSubview(self)
+        
+        
+        /// Initial titleLabel
+        /// Add font, value and frame to titleLabel and calculate titleLabel height
+        titleLabel.text = title
+        titleLabel.font = style.configuration().titleFont
+        titleLabel.frame = CGRect(x: configuration.labelEdgeInset.left,
+                                  y: configuration.labelEdgeInset.top,
+                                  width: labelWidth,
+                                  height: 0)
+        
+        titleLabel.sizeToFit()
+        let labelHeight = titleLabel.textRect(forBounds: titleLabel.bounds, limitedToNumberOfLines: 0).height
+        
+        
+        /// Initial subtitleLabel
+        /// Add font, value and frame to subtitleLabel and calculate subtitleLabel height
+        subtitleLabel.font = style.configuration().subtitleFont
+        subtitleLabel.text = subtitle
+        subtitleLabel.frame = CGRect(x: configuration.subtitleLabelEdgeInset.left,
+                                     y: (configuration.labelEdgeInset.top + configuration.subtitleLabelEdgeInset.top) + labelHeight,
+                                     width: labelWidth,
+                                     height: 0)
+        
+        subtitleLabel.sizeToFit()
+        let subtitleLabelHeight = subtitleLabel.textRect(forBounds: subtitleLabel.bounds, limitedToNumberOfLines: 0).height
+        
+        
+        /// Banner Height
+        /// Calculate height of banner based on labels and margins
+        let bannerHeight = subtitleLabelHeight + labelHeight + labelsVerticalMargin
+        
+        
+        /// Set titleLabel frame
+        titleLabel.frame = CGRect(x: configuration.labelEdgeInset.left,
+                                  y: configuration.labelEdgeInset.top,
+                                  width: labelWidth,
+                                  height: labelHeight)
+        
+        /// Set subtitleLabel frame
+        subtitleLabel.frame = CGRect(x: configuration.subtitleLabelEdgeInset.left,
+                                     y: subtitleLabel.frame.origin.y,
+                                     width: labelWidth,
+                                     height: subtitleLabelHeight)
+        
+        /// Set originalFrame and bannerView's frame
+        switch bannerType {
+        
+        case .full:
+            
+            OriginalFrame = CGRect(x: 0, y: -bannerHeight, width:bannerWidth, height: bannerHeight)
+            bannerView.frame = CGRect(x: 0, y: -bannerHeight , width: width, height: bannerHeight)
+            
+        case .snack:
+            
+            OriginalFrame = CGRect(x: configuration.notificationEdgeInset.left, y: parent.frame.height + (bannerHeight + bannerVerticalMargin), width:bannerWidth, height: bannerHeight)
+            bannerView.frame = CGRect(x: configuration.notificationEdgeInset.left, y: parent.frame.height + bannerVerticalMargin, width: width - (configuration.notificationEdgeInset.left + configuration.notificationEdgeInset.right), height: bannerHeight)
+        default:
+            OriginalFrame = CGRect(x: configuration.notificationEdgeInset.left, y: 0 + (-bannerHeight - bannerVerticalMargin), width:bannerWidth, height: bannerHeight)
+            bannerView.frame = CGRect(x: configuration.notificationEdgeInset.left, y: -bannerHeight - bannerVerticalMargin, width: width - (configuration.notificationEdgeInset.left + configuration.notificationEdgeInset.right), height: bannerHeight)
+        }
+    
+        /// Add icon to bannerView
+        if let icon = icon {
+            addIcon(icon: icon, bannerHeight: bannerHeight, labelWidth: labelWidth, labelHeight: labelHeight, subtitleLabelHeight: subtitleLabelHeight)
+        }
+        
+    
+        /// Finally, show bannerView
+        switch bannerType {
+        case .full:
+            showFullBanner(width: width, bannerHeight: bannerHeight, dismissAutomatically: dismissAutomatically)
+        case .snack:
+            showSnakBanner(width: width, bannerHeight: bannerHeight, dismissAutomatically: dismissAutomatically)
+        default:
+            showFloatBanner(width: width, bannerHeight: bannerHeight, dismissAutomatically: dismissAutomatically)
         }
         
     }
     
-    /// BannerView dismiss function
-    public func dismiss() {
-        UIView.animate(withDuration: configuration.animateDuration, delay: configuration.bannerAppearanceDuration, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.85, options: .curveEaseIn, animations: { [weak self] in
-            
-            guard let self = self else { return }
-            self.bannerView.frame =  self.OriginalFrame!
-            guard let parent = self.parent else { return }
-            parent.layoutIfNeeded()
-            
-        }, completion: { [weak self] finished in
-            
-            ///remove subview after time bannerAppearanceDuration second
-            guard let self = self else { return }
-            self.bannerView.removeFromSuperview()
-            self.isDispalying = false
-        })
-    }
     
     /// Add icon to banner
     private func addIcon(icon: UIImage, bannerHeight: CGFloat, labelWidth: CGFloat, labelHeight: CGFloat, subtitleLabelHeight: CGFloat ) {
@@ -266,10 +249,10 @@ extension MRNotificationBanner {
     
     private func showFullBanner(width: CGFloat, bannerHeight: CGFloat,dismissAutomatically: Bool?) {
         
+        queue.append(self)
         UIView.animate(withDuration: configuration.animateDuration, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.85, options: .curveEaseInOut, animations: { [weak self] in
             
             guard let self = self else { return }
-            self.isDispalying = true
             self.bannerView.frame =  CGRect(x: 0, y: 0, width: width, height: bannerHeight)
             self.parent.layoutIfNeeded()
             
@@ -277,7 +260,7 @@ extension MRNotificationBanner {
             
             guard let self = self else { return }
             if dismissAutomatically == true {
-                self.dismiss()
+                self.beginToDismissAutomatically()
             }
             
         })
@@ -285,10 +268,10 @@ extension MRNotificationBanner {
     
     private func showSnakBanner(width: CGFloat, bannerHeight: CGFloat,dismissAutomatically: Bool?) {
         
+        queue.append(self)
         UIView.animate(withDuration: configuration.animateDuration, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.85, options: .curveEaseInOut, animations: { [weak self] in
             
             guard let self = self else { return }
-            self.isDispalying = true
             self.bannerView.frame =  CGRect(x: self.configuration.notificationEdgeInset.left, y: self.parent.frame.height - (bannerHeight + self.configuration.notificationEdgeInset.top + self.parent.safeAreaInsets.bottom), width: width - (self.configuration.notificationEdgeInset.left + self.configuration.notificationEdgeInset.right), height: bannerHeight)
             self.parent.layoutIfNeeded()
             
@@ -296,7 +279,7 @@ extension MRNotificationBanner {
             
             guard let self = self else { return }
             if dismissAutomatically == true {
-                self.dismiss()
+                self.beginToDismissAutomatically()
             }
             
         })
@@ -305,10 +288,10 @@ extension MRNotificationBanner {
     
     private func showFloatBanner(width: CGFloat, bannerHeight: CGFloat,dismissAutomatically: Bool?) {
         
+        queue.append(self)
         UIView.animate(withDuration: configuration.animateDuration, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.85, options: .curveEaseInOut, animations: { [weak self] in
             
             guard let self = self else { return }
-            self.isDispalying = true
             self.bannerView.frame =  CGRect(x: self.configuration.notificationEdgeInset.left, y: self.configuration.notificationEdgeInset.top, width: width - (self.configuration.notificationEdgeInset.left + self.configuration.notificationEdgeInset.right), height: bannerHeight)
             
             self.parent.layoutIfNeeded()
@@ -317,10 +300,60 @@ extension MRNotificationBanner {
             
             guard let self = self else { return }
             if dismissAutomatically == true {
-                self.dismiss()
+                self.beginToDismissAutomatically()
             }
             
         })
         
+    }
+    
+    public func dismiss() {
+        dismissBanner()
+    }
+    
+    private func beginToDismissAutomatically() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(timeInterval: self.configuration.bannerAppearanceDuration, target: self, selector: #selector(dismissBanner), userInfo: nil, repeats: false)
+    }
+    
+    private func dismissElementInQueue() {
+        DispatchQueue.main.async {
+            self.dismissBanner()
+        }
+    }
+    /// BannerView dismiss function
+    @objc private func dismissBanner() {
+        
+        UIView.animate(withDuration: configuration.animateDuration, delay: 0.05, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.85, options: .curveEaseIn, animations: { [weak self] in
+            
+            guard let self = self else { return }
+            
+            var element : MRNotificationBanner?
+            if let index = self.queue.firstIndex(of: self) {
+                element = self.queue[index]
+            }
+            element?.bannerView.frame =  (element?.OriginalFrame)!
+            guard let parent = element?.parent else { return }
+            parent.layoutIfNeeded()
+            
+            /// remove all elements in queue
+            self.queue.remove(at: self.queue.firstIndex(of: self) ?? 0)
+            for element in self.queue {
+                element.dismissElementInQueue()
+            }
+            
+            
+        }, completion: { [weak self] finished in
+            
+            /// Remove subview after time bannerAppearanceDuration second
+            guard let self = self else { return }
+            var element : MRNotificationBanner?
+            /// Remove all elements in queue from superview
+            if let index = self.queue.lastIndex(of: self) {
+                element = self.queue[index]
+            }
+            element?.bannerView.removeFromSuperview()
+            
+        })
     }
 }
