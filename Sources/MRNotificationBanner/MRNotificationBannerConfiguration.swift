@@ -32,6 +32,8 @@ public struct MRNotificationBannerConfiguration {
     
     public var dropShadow               : Bool = false
     
+    public var textAlignment            : NSTextAlignment? = .left
+    
     public init() {}
     
 }

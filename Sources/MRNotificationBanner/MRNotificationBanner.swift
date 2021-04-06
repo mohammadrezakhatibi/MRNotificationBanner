@@ -122,6 +122,7 @@ open class MRNotificationBanner: UIView {
                                   width: labelWidth,
                                   height: 0)
         
+        titleLabel.textAlignment = configuration.textAlignment!
         titleLabel.sizeToFit()
         let labelHeight = titleLabel.textRect(forBounds: titleLabel.bounds, limitedToNumberOfLines: 0).height
         
@@ -135,6 +136,7 @@ open class MRNotificationBanner: UIView {
                                      width: labelWidth,
                                      height: 0)
         
+        subtitleLabel.textAlignment = configuration.textAlignment!
         subtitleLabel.sizeToFit()
         let subtitleLabelHeight = subtitleLabel.textRect(forBounds: subtitleLabel.bounds, limitedToNumberOfLines: 0).height
         
